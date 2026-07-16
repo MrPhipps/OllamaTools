@@ -344,9 +344,6 @@ def execute_tool(name: str, args: dict) -> str:
 
 # ── Ollama API ────────────────────────────────────────────────────────────────
 
-_think_support_cache: dict[str, bool] = {}
-
-
 def _post(payload: dict, timeout: int = 300) -> dict:
     data = json.dumps(payload).encode()
     req  = urllib.request.Request(
@@ -365,35 +362,10 @@ def _post(payload: dict, timeout: int = 300) -> dict:
         sys.exit(1)
 
 
-def supports_thinking(model: str) -> bool:
-    """Check whether the model supports think:true via /api/show. Cached per session."""
-    if model not in _think_support_cache:
-        try:
-            data = json.dumps({"model": model}).encode()
-            req  = urllib.request.Request(
-                f"{OLLAMA_BASE}/api/show", data=data,
-                headers={"Content-Type": "application/json"}, method="POST",
-            )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                info = json.loads(resp.read())
-            # Ollama 0.19+ lists capabilities in model info
-            caps = info.get("capabilities", [])
-            template = info.get("modelfile", "") + info.get("template", "")
-            _think_support_cache[model] = (
-                "thinking" in caps or
-                "thinking" in template.lower()
-            )
-        except Exception:
-            # On any error, assume no thinking support rather than crashing
-            _think_support_cache[model] = False
-        print(f"[fcis-agent] {model} thinking={'yes' if _think_support_cache[model] else 'no'}",
-              file=sys.stderr)
-    return _think_support_cache[model]
-
-
 def ollama_chat(model: str, messages: list, tools: list | None, think: bool) -> dict:
+    # Ollama ignores unknown options, so sending think=True to non-thinking models is safe.
     payload: dict = {"model": model, "messages": messages, "stream": False}
-    if think and supports_thinking(model):
+    if think:
         payload["think"] = True
     if tools:
         payload["tools"] = tools
