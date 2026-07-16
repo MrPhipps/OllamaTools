@@ -409,31 +409,23 @@ def run_agent(model: str, prompt: str, system: str, use_tools: bool, think: bool
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
-    iteration_count = 0  # Track iterations to prevent infinite loops
-    
-    while iteration_count < 10:
-        iteration_count += 1
+    while True:
         response = ollama_chat(model, messages, tools, think)
         msg      = response.get("message", {})
         calls    = msg.get("tool_calls", [])
 
         if not calls:
             if thinking := msg.get("thinking", ""):
-                print(f"\n<tool_call>\n{thinking}\n<tool_call>\n", file=sys.stderr)
+                print(f"\n<think>\n{thinking}\n</think>\n", file=sys.stderr)
             return msg.get("content", "")
 
         messages.append({"role": "assistant", **{k: v for k, v in msg.items() if k != "role"}})
         for call in calls:
             fn     = call.get("function", {})
             result = execute_tool(fn.get("name", ""), fn.get("arguments", {}))
-            # Add a safety check for tool execution errors
             if result.startswith("ERROR:"):
-                print(f"[fcis-agent] Tool execution failed: {result}", file=sys.stderr)
-                # Return the error instead of continuing the loop
-                return result
+                print(f"[fcis-agent] Tool error (passing to model): {result}", file=sys.stderr)
             messages.append({"role": "tool", "content": result})
-
-    return "ERROR: tool loop exceeded 10 iterations. This may indicate an infinite loop in tool execution or model responses."
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
