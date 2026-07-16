@@ -362,14 +362,26 @@ def _post(payload: dict, timeout: int = 300) -> dict:
         sys.exit(1)
 
 
+_think_support_cache: dict[str, bool] = {}
+
+
 def ollama_chat(model: str, messages: list, tools: list | None, think: bool) -> dict:
-    # Ollama ignores unknown options, so sending think=True to non-thinking models is safe.
     payload: dict = {"model": model, "messages": messages, "stream": False}
-    if think:
-        payload["think"] = True
     if tools:
         payload["tools"] = tools
-    return _post(payload)
+    # Skip think=True if we already learned this model rejects it (HTTP 400).
+    want_think = think and _think_support_cache.get(model, True)
+    if want_think:
+        payload["think"] = True
+    try:
+        return _post(payload)
+    except RuntimeError as e:
+        if want_think and "does not support thinking" in str(e):
+            _think_support_cache[model] = False
+            print(f"[fcis-agent] {model} does not support thinking — retrying without", file=sys.stderr)
+            payload.pop("think")
+            return _post(payload)
+        raise
 
 
 # ── Tool loop ─────────────────────────────────────────────────────────────────

@@ -110,29 +110,63 @@ func syncHTTP(_ request: URLRequest) -> String {
 
 // MARK: - Ollama API
 
+var thinkSupportCache: [String: Bool] = [:]
+
+// Returns (responseData, errorDescription). Non-200 HTTP status is surfaced as errorDescription.
+func _postRaw(url: URL, body: [String: Any]) -> (Data?, String?) {
+    guard let bodyData = try? JSONSerialization.data(withJSONObject: body) else {
+        return (nil, "JSON serialization failed")
+    }
+    var req = URLRequest(url: url, timeoutInterval: 300)
+    req.httpMethod = "POST"
+    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    req.httpBody = bodyData
+    let sema = DispatchSemaphore(value: 0)
+    var resultData: Data?
+    var errorMsg: String?
+    URLSession.shared.dataTask(with: req) { data, resp, error in
+        defer { sema.signal() }
+        if let error { errorMsg = error.localizedDescription; return }
+        if let http = resp as? HTTPURLResponse, http.statusCode != 200 {
+            errorMsg = "HTTP \(http.statusCode): \(String(data: data ?? Data(), encoding: .utf8) ?? "")"
+            return
+        }
+        resultData = data
+    }.resume()
+    sema.wait()
+    return (resultData, errorMsg)
+}
+
 func ollamaChat(model: String, messages: [[String: Any]], tools: [[String: Any]]?, think: Bool) -> [String: Any] {
     guard let url = URL(string: "\(Config.ollamaBase)/api/chat") else { return [:] }
     var body: [String: Any] = ["model": model, "messages": messages, "stream": false]
     if let tools, !tools.isEmpty { body["tools"] = tools }
-    if think { body["think"] = true }
-    guard let data = try? JSONSerialization.data(withJSONObject: body) else { return [:] }
-    var req = URLRequest(url: url, timeoutInterval: 300)
-    req.httpMethod = "POST"
-    req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-    req.httpBody = data
-    let sema = DispatchSemaphore(value: 0)
-    var response: [String: Any] = [:]
-    URLSession.shared.dataTask(with: req) { data, _, error in
-        defer { sema.signal() }
-        if let error {
-            printErr("[fcis-agent] Ollama request failed: \(error.localizedDescription)")
-            return
+
+    let wantThink = think && (thinkSupportCache[model] ?? true)
+    if wantThink { body["think"] = true }
+
+    func parse(_ data: Data) -> [String: Any] {
+        (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+    }
+
+    let (data, errorMsg) = _postRaw(url: url, body: body)
+    if let errorMsg {
+        if wantThink && errorMsg.contains("does not support thinking") {
+            thinkSupportCache[model] = false
+            printErr("[fcis-agent] \(model) does not support thinking — retrying without")
+            body.removeValue(forKey: "think")
+            let (data2, err2) = _postRaw(url: url, body: body)
+            if let err2 { printErr("[fcis-agent] Ollama error: \(err2)"); return [:] }
+            return data2.map(parse) ?? [:]
         }
-        guard let data else { return }
-        response = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-    }.resume()
-    sema.wait()
-    return response
+        if errorMsg.contains("Connection refused") || errorMsg.contains("Could not connect") {
+            printErr("[fcis-agent] Ollama unreachable — brew services start ollama")
+            exit(1)
+        }
+        printErr("[fcis-agent] Ollama request failed: \(errorMsg)")
+        return [:]
+    }
+    return data.map(parse) ?? [:]
 }
 
 // MARK: - Tool implementations
