@@ -313,6 +313,160 @@ def tool_web_fetch(args: dict) -> str:
         return f"ERROR: {e}"
 
 
+
+def tool_tuist_generate(args: dict) -> str:
+    cwd = expand(args["path"]) if "path" in args else default_cwd()
+    try:
+        r = subprocess.run("tuist generate", shell=True, cwd=cwd,
+                           capture_output=True, text=True, timeout=120)
+        out = (r.stdout + r.stderr)[:8000]
+        return out if out else "tuist generate produced no output."
+    except subprocess.TimeoutExpired:
+        return "ERROR: tuist generate timed out after 120s"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+def tool_tuist_install(args: dict) -> str:
+    cwd = expand(args["path"]) if "path" in args else default_cwd()
+    try:
+        r = subprocess.run("tuist install", shell=True, cwd=cwd,
+                           capture_output=True, text=True, timeout=120)
+        out = (r.stdout + r.stderr)[:8000]
+        return out if out else "tuist install produced no output."
+    except subprocess.TimeoutExpired:
+        return "ERROR: tuist install timed out after 120s"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+def tool_tuist_lint(args: dict) -> str:
+    cwd = expand(args["path"]) if "path" in args else default_cwd()
+    try:
+        r = subprocess.run("tuist lint project", shell=True, cwd=cwd,
+                           capture_output=True, text=True, timeout=60)
+        out = (r.stdout + r.stderr)[:8000]
+        return out if out else "No lint issues found."
+    except subprocess.TimeoutExpired:
+        return "ERROR: tuist lint timed out after 60s"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+def tool_tuist_graph(args: dict) -> str:
+    cwd    = expand(args["path"]) if "path" in args else default_cwd()
+    fmt    = args.get("format", "json")
+    try:
+        r = subprocess.run(f"tuist graph --format {fmt}", shell=True, cwd=cwd,
+                           capture_output=True, text=True, timeout=60)
+        out = (r.stdout + r.stderr)[:8000]
+        return out if out else "tuist graph produced no output."
+    except subprocess.TimeoutExpired:
+        return "ERROR: tuist graph timed out after 60s"
+    except Exception as e:
+        return f"ERROR: {e}"
+
+
+def _http_get(url: str, timeout: int = 15) -> str:
+    """Minimal GET helper shared by web_fetch and api_docs_fetch."""
+    import html as _html
+    req = urllib.request.Request(url, headers={"User-Agent": "fcis-agent/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode(errors="replace")
+    return raw
+
+
+def _strip_html(text: str) -> str:
+    import re as _re, html as _html
+    text = _re.sub(r"<[^>]+>", " ", text)
+    text = _html.unescape(text)
+    return _re.sub(r"\s+", " ", text).strip()
+
+
+def _base_url(spec: dict) -> str:
+    """Extract base URL from OpenAPI 2 (host+basePath) or OpenAPI 3 (servers)."""
+    if servers := spec.get("servers"):
+        return servers[0].get("url", "")
+    host = spec.get("host", "")
+    base = spec.get("basePath", "/")
+    schemes = spec.get("schemes", ["https"])
+    return f"{schemes[0]}://{host}{base}" if host else ""
+
+
+def _format_openapi(spec: dict, endpoint_filter: str | None, max_chars: int) -> str:
+    lines: list[str] = []
+    info = spec.get("info", {})
+    lines.append(f"API: {info.get('title', '?')} v{info.get('version', '?')}")
+    base = _base_url(spec)
+    if base:
+        lines.append(f"Base URL: {base}")
+    lines.append("")
+
+    for path, methods in sorted(spec.get("paths", {}).items()):
+        if endpoint_filter and endpoint_filter not in path:
+            continue
+        for method, op in methods.items():
+            if method == "parameters":
+                continue
+            if not isinstance(op, dict):
+                continue
+            summary = op.get("summary", op.get("operationId", ""))
+            lines.append(f"{method.upper()} {path}" + (f" — {summary}" if summary else ""))
+            for p in op.get("parameters", []):
+                req_tag = " (required)" if p.get("required") else ""
+                ptype = p.get("schema", {}).get("type", p.get("type", "?"))
+                lines.append(f"  param [{p.get('in','?')}] {p.get('name','?')}: {ptype}{req_tag}")
+            if rb := op.get("requestBody"):
+                for ct, media in rb.get("content", {}).items():
+                    schema_str = json.dumps(media.get("schema", {}))[:200]
+                    lines.append(f"  body ({ct}): {schema_str}")
+            for code, resp in op.get("responses", {}).items():
+                desc = resp.get("description", "") if isinstance(resp, dict) else ""
+                lines.append(f"  → {code}: {desc}")
+            lines.append("")
+
+    return "\n".join(lines)[:max_chars]
+
+
+def tool_api_docs_fetch(args: dict) -> str:
+    url       = args.get("url", "")
+    endpoint  = args.get("endpoint")
+    max_chars = int(args.get("max_chars", 12000))
+
+    if not url:
+        return "ERROR: url is required"
+
+    # Attempt 1: fetch the provided URL directly
+    try:
+        raw = _http_get(url)
+    except Exception as e:
+        return f"ERROR: could not fetch {url}: {e}"
+
+    stripped = raw.lstrip()
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            spec = json.loads(raw)
+            if any(k in spec for k in ("paths", "openapi", "swagger")):
+                return _format_openapi(spec, endpoint, max_chars)
+        except json.JSONDecodeError:
+            pass
+
+    # Attempt 2: probe common OpenAPI spec paths from the root URL
+    root = url.rstrip("/")
+    for suffix in ["/openapi.json", "/swagger.json", "/api-docs",
+                   "/v3/api-docs", "/swagger/v1/swagger.json", "/api/openapi.json"]:
+        try:
+            raw2 = _http_get(root + suffix, timeout=8)
+            spec = json.loads(raw2)
+            if "paths" in spec:
+                return _format_openapi(spec, endpoint, max_chars)
+        except Exception:
+            continue
+
+    # Fallback: return plain text
+    return _strip_html(raw)[:max_chars]
+
+
 TOOL_HANDLERS = {
     "read_file":          tool_read_file,
     "write_file":         tool_write_file,
@@ -327,6 +481,11 @@ TOOL_HANDLERS = {
     "sdk_search":         tool_sdk_search,
     "web_search":         tool_web_search,
     "web_fetch":          tool_web_fetch,
+    "tuist_generate":     tool_tuist_generate,
+    "tuist_install":      tool_tuist_install,
+    "tuist_lint":         tool_tuist_lint,
+    "tuist_graph":        tool_tuist_graph,
+    "api_docs_fetch":     tool_api_docs_fetch,
 }
 
 

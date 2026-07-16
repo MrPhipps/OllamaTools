@@ -274,6 +274,126 @@ func webFetchTool(_ args: [String: Any]) throws -> String {
     return syncHTTP(req)
 }
 
+
+func tuistGenerateTool(_ args: [String: Any]) throws -> String {
+    let cwd = (args["path"] as? String).map { expandPath($0).path }
+    return runShell("tuist generate", cwd: cwd, timeout: 120)
+}
+
+func tuistInstallTool(_ args: [String: Any]) throws -> String {
+    let cwd = (args["path"] as? String).map { expandPath($0).path }
+    return runShell("tuist install", cwd: cwd, timeout: 120)
+}
+
+func tuistLintTool(_ args: [String: Any]) throws -> String {
+    let cwd = (args["path"] as? String).map { expandPath($0).path }
+    return runShell("tuist lint project", cwd: cwd, timeout: 60)
+}
+
+func tuistGraphTool(_ args: [String: Any]) throws -> String {
+    let cwd = (args["path"] as? String).map { expandPath($0).path }
+    let fmt = args["format"] as? String ?? "json"
+    return runShell("tuist graph --format \(fmt)", cwd: cwd, timeout: 60)
+}
+
+// Synchronous GET — returns raw response body or "ERROR: ..." string.
+func httpGet(url urlStr: String, timeout: Double = 15) -> String {
+    guard let url = URL(string: urlStr) else { return "ERROR: invalid URL: \(urlStr)" }
+    var req = URLRequest(url: url, timeoutInterval: timeout)
+    req.setValue("fcis-agent/1.0", forHTTPHeaderField: "User-Agent")
+    return syncHTTP(req)
+}
+
+func formatOpenAPI(spec: [String: Any], endpointFilter: String?, maxChars: Int) -> String {
+    var lines: [String] = []
+    if let info = spec["info"] as? [String: Any] {
+        let title = info["title"] as? String ?? "?"
+        let version = info["version"] as? String ?? "?"
+        lines.append("API: \(title) v\(version)")
+    }
+    // Base URL (OpenAPI 3 servers or OpenAPI 2 host)
+    if let servers = spec["servers"] as? [[String: Any]],
+       let base = servers.first?["url"] as? String {
+        lines.append("Base URL: \(base)")
+    } else if let host = spec["host"] as? String {
+        let base = spec["basePath"] as? String ?? "/"
+        lines.append("Base URL: https://\(host)\(base)")
+    }
+    lines.append("")
+
+    guard let paths = spec["paths"] as? [String: Any] else {
+        return lines.joined(separator: "\n")
+    }
+    for path in paths.keys.sorted() {
+        if let filter = endpointFilter, !path.contains(filter) { continue }
+        guard let methods = paths[path] as? [String: Any] else { continue }
+        for method in methods.keys.sorted() {
+            guard method != "parameters",
+                  let op = methods[method] as? [String: Any] else { continue }
+            let summary = op["summary"] as? String ?? op["operationId"] as? String ?? ""
+            lines.append("\(method.uppercased()) \(path)\(summary.isEmpty ? "" : " — \(summary)")")
+            for param in (op["parameters"] as? [[String: Any]] ?? []) {
+                let name = param["name"] as? String ?? "?"
+                let loc  = param["in"]   as? String ?? "?"
+                let req  = (param["required"] as? Bool ?? false) ? " (required)" : ""
+                let ptype = (param["schema"] as? [String: Any])?["type"] as? String
+                         ?? param["type"] as? String ?? "?"
+                lines.append("  param [\(loc)] \(name): \(ptype)\(req)")
+            }
+            if let rb = op["requestBody"] as? [String: Any],
+               let content = rb["content"] as? [String: Any] {
+                for (ct, media) in content {
+                    if let schema = (media as? [String: Any])?["schema"],
+                       let schemaData = try? JSONSerialization.data(withJSONObject: schema),
+                       let schemaStr = String(data: schemaData, encoding: .utf8) {
+                        lines.append("  body (\(ct)): \(String(schemaStr.prefix(200)))")
+                    }
+                }
+            }
+            for (code, resp) in (op["responses"] as? [String: Any] ?? [:]) {
+                let desc = (resp as? [String: Any])?["description"] as? String ?? ""
+                lines.append("  → \(code): \(desc)")
+            }
+            lines.append("")
+        }
+    }
+    return String(lines.joined(separator: "\n").prefix(maxChars))
+}
+
+func apiDocsFetchTool(_ args: [String: Any]) throws -> String {
+    guard let urlStr = args["url"] as? String else { throw ToolError.missingArg("url") }
+    let endpointFilter = args["endpoint"] as? String
+    let maxChars = args["max_chars"] as? Int ?? 12000
+
+    // Attempt 1: fetch the provided URL
+    let raw = httpGet(url: urlStr)
+    if raw.hasPrefix("ERROR:") { return raw }
+
+    let trimmed = raw.trimmingCharacters(in: .whitespaces)
+    if trimmed.hasPrefix("{") || trimmed.hasPrefix("["),
+       let data = raw.data(using: .utf8),
+       let spec = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+       spec["paths"] != nil || spec["openapi"] != nil || spec["swagger"] != nil {
+        return formatOpenAPI(spec: spec, endpointFilter: endpointFilter, maxChars: maxChars)
+    }
+
+    // Attempt 2: probe common OpenAPI spec paths
+    let root = urlStr.hasSuffix("/") ? String(urlStr.dropLast()) : urlStr
+    for suffix in ["/openapi.json", "/swagger.json", "/api-docs",
+                   "/v3/api-docs", "/swagger/v1/swagger.json", "/api/openapi.json"] {
+        let candidate = httpGet(url: root + suffix, timeout: 8)
+        if candidate.hasPrefix("ERROR:") { continue }
+        if let data = candidate.data(using: .utf8),
+           let spec = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+           spec["paths"] != nil {
+            return formatOpenAPI(spec: spec, endpointFilter: endpointFilter, maxChars: maxChars)
+        }
+    }
+
+    // Fallback: plain text
+    return String(raw.prefix(maxChars))
+}
+
 func executeTool(name: String, args: [String: Any]) -> String {
     do {
         switch name {
@@ -290,6 +410,11 @@ func executeTool(name: String, args: [String: Any]) -> String {
         case "sdk_search":        return try sdkSearchTool(args)
         case "web_search":        return try webSearchTool(args)
         case "web_fetch":         return try webFetchTool(args)
+        case "tuist_generate":    return try tuistGenerateTool(args)
+        case "tuist_install":     return try tuistInstallTool(args)
+        case "tuist_lint":        return try tuistLintTool(args)
+        case "tuist_graph":       return try tuistGraphTool(args)
+        case "api_docs_fetch":    return try apiDocsFetchTool(args)
         default:                  return "ERROR: unknown tool: \(name)"
         }
     } catch {
@@ -330,6 +455,11 @@ let toolSchema: [[String: Any]] = [
     makeTool("sdk_search",        "Search Apple SDK .swiftinterface and .h headers",            [("query","string",true)]),
     makeTool("web_search",        "DuckDuckGo search",                                          [("query","string",true)]),
     makeTool("web_fetch",         "Fetch a URL as plain text (Swift Evolution, docs, etc.)",    [("url","string",true)]),
+    makeTool("tuist_generate",    "Run tuist generate to create/update the Xcode project",        [("path","string",false)]),
+    makeTool("tuist_install",     "Run tuist install to fetch manifest Swift Package deps",       [("path","string",false)]),
+    makeTool("tuist_lint",        "Run tuist lint project to validate the Tuist manifest",        [("path","string",false)]),
+    makeTool("tuist_graph",       "Run tuist graph to emit the dependency graph",                 [("path","string",false), ("format","string",false)]),
+    makeTool("api_docs_fetch",    "Fetch REST API docs; auto-detects OpenAPI JSON specs",         [("url","string",true), ("endpoint","string",false), ("max_chars","integer",false)]),
 ]
 
 // MARK: - Agent loop

@@ -7,10 +7,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "path": { "type": "string", "description": "Absolute or ~/ path to the file." },
-          "lines": { "type": "string", "description": "Optional line range, e.g. '10-50'." }
+          "path": {
+            "type": "string",
+            "description": "Absolute or ~/ path to the file."
+          },
+          "lines": {
+            "type": "string",
+            "description": "Optional line range, e.g. '10-50'."
+          }
         },
-        "required": ["path"]
+        "required": [
+          "path"
+        ]
       }
     }
   },
@@ -22,10 +30,19 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "path": { "type": "string", "description": "Absolute or ~/ path to write." },
-          "content": { "type": "string", "description": "Full content to write." }
+          "path": {
+            "type": "string",
+            "description": "Absolute or ~/ path to write."
+          },
+          "content": {
+            "type": "string",
+            "description": "Full content to write."
+          }
         },
-        "required": ["path", "content"]
+        "required": [
+          "path",
+          "content"
+        ]
       }
     }
   },
@@ -37,10 +54,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "command": { "type": "string", "description": "Shell command to run." },
-          "cwd": { "type": "string", "description": "Working directory. Defaults to invocation directory." }
+          "command": {
+            "type": "string",
+            "description": "Shell command to run."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Working directory. Defaults to invocation directory."
+          }
         },
-        "required": ["command"]
+        "required": [
+          "command"
+        ]
       }
     }
   },
@@ -52,11 +77,22 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "path": { "type": "string", "description": "Directory to list." },
-          "extension": { "type": "string", "description": "Extension filter without dot, e.g. 'swift'." },
-          "recursive": { "type": "boolean", "description": "Recurse into subdirectories. Default false." }
+          "path": {
+            "type": "string",
+            "description": "Directory to list."
+          },
+          "extension": {
+            "type": "string",
+            "description": "Extension filter without dot, e.g. 'swift'."
+          },
+          "recursive": {
+            "type": "boolean",
+            "description": "Recurse into subdirectories. Default false."
+          }
         },
-        "required": ["path"]
+        "required": [
+          "path"
+        ]
       }
     }
   },
@@ -68,11 +104,22 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "pattern": { "type": "string", "description": "Regex or literal string to search." },
-          "path": { "type": "string", "description": "Directory or file to search. Defaults to invocation directory." },
-          "extension": { "type": "string", "description": "Restrict to files with this extension, e.g. 'swift'." }
+          "pattern": {
+            "type": "string",
+            "description": "Regex or literal string to search."
+          },
+          "path": {
+            "type": "string",
+            "description": "Directory or file to search. Defaults to invocation directory."
+          },
+          "extension": {
+            "type": "string",
+            "description": "Restrict to files with this extension, e.g. 'swift'."
+          }
         },
-        "required": ["pattern"]
+        "required": [
+          "pattern"
+        ]
       }
     }
   },
@@ -84,10 +131,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "path": { "type": "string", "description": "Path to the .swift file to type-check." },
-          "extra_flags": { "type": "string", "description": "Optional extra swiftc flags, e.g. '-strict-concurrency=complete'." }
+          "path": {
+            "type": "string",
+            "description": "Path to the .swift file to type-check."
+          },
+          "extra_flags": {
+            "type": "string",
+            "description": "Optional extra swiftc flags, e.g. '-strict-concurrency=complete'."
+          }
         },
-        "required": ["path"]
+        "required": [
+          "path"
+        ]
       }
     }
   },
@@ -99,8 +154,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "cwd": { "type": "string", "description": "Project root containing Package.swift. Defaults to invocation directory." },
-          "configuration": { "type": "string", "enum": ["debug", "release"], "description": "Build configuration. Default: debug." }
+          "cwd": {
+            "type": "string",
+            "description": "Project root containing Package.swift. Defaults to invocation directory."
+          },
+          "configuration": {
+            "type": "string",
+            "enum": [
+              "debug",
+              "release"
+            ],
+            "description": "Build configuration. Default: debug."
+          }
         },
         "required": []
       }
@@ -114,8 +179,14 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "filter": { "type": "string", "description": "Test name filter, e.g. 'MIDIChannelTests' or 'testInvalidChannel'." },
-          "cwd": { "type": "string", "description": "Project root. Defaults to invocation directory." }
+          "filter": {
+            "type": "string",
+            "description": "Test name filter, e.g. 'MIDIChannelTests' or 'testInvalidChannel'."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Project root. Defaults to invocation directory."
+          }
         },
         "required": []
       }
@@ -129,9 +200,18 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "path": { "type": "string", "description": "Optional file path to diff. Omit for full working tree diff." },
-          "staged": { "type": "boolean", "description": "Show staged (--cached) diff instead of unstaged. Default false." },
-          "cwd": { "type": "string", "description": "Git repo root. Defaults to invocation directory." }
+          "path": {
+            "type": "string",
+            "description": "Optional file path to diff. Omit for full working tree diff."
+          },
+          "staged": {
+            "type": "boolean",
+            "description": "Show staged (--cached) diff instead of unstaged. Default false."
+          },
+          "cwd": {
+            "type": "string",
+            "description": "Git repo root. Defaults to invocation directory."
+          }
         },
         "required": []
       }
@@ -145,7 +225,10 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "cwd": { "type": "string", "description": "Git repo root. Defaults to invocation directory." }
+          "cwd": {
+            "type": "string",
+            "description": "Git repo root. Defaults to invocation directory."
+          }
         },
         "required": []
       }
@@ -159,11 +242,22 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "pattern": { "type": "string", "description": "Regex or literal string to search for, e.g. 'MIDIClientCreate' or 'protocol Sendable'." },
-          "framework": { "type": "string", "description": "Optional framework name to narrow the search, e.g. 'CoreMIDI', 'SwiftUI', 'Combine'. Omit to search all frameworks." },
-          "max_results": { "type": "integer", "description": "Maximum matching lines to return. Default 40." }
+          "pattern": {
+            "type": "string",
+            "description": "Regex or literal string to search for, e.g. 'MIDIClientCreate' or 'protocol Sendable'."
+          },
+          "framework": {
+            "type": "string",
+            "description": "Optional framework name to narrow the search, e.g. 'CoreMIDI', 'SwiftUI', 'Combine'. Omit to search all frameworks."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Maximum matching lines to return. Default 40."
+          }
         },
-        "required": ["pattern"]
+        "required": [
+          "pattern"
+        ]
       }
     }
   },
@@ -171,14 +265,22 @@
     "type": "function",
     "function": {
       "name": "web_search",
-      "description": "Search the web via DuckDuckGo and return titles, URLs, and snippets. Use for looking up Swift documentation, Apple developer docs, swift.org proposals, or Stack Overflow. Prefer sdk_search for API existence checks — use web_search for conceptual questions or official docs.",
+      "description": "Search the web via DuckDuckGo and return titles, URLs, and snippets. Use for looking up Swift documentation, Apple developer docs, swift.org proposals, or Stack Overflow. Prefer sdk_search for API existence checks \u2014 use web_search for conceptual questions or official docs.",
       "parameters": {
         "type": "object",
         "properties": {
-          "query": { "type": "string", "description": "Search query, e.g. 'Swift SE-0296 async main' or 'CoreMIDI MIDISendEventList macOS 14'." },
-          "max_results": { "type": "integer", "description": "Number of results to return. Default 8." }
+          "query": {
+            "type": "string",
+            "description": "Search query, e.g. 'Swift SE-0296 async main' or 'CoreMIDI MIDISendEventList macOS 14'."
+          },
+          "max_results": {
+            "type": "integer",
+            "description": "Number of results to return. Default 8."
+          }
         },
-        "required": ["query"]
+        "required": [
+          "query"
+        ]
       }
     }
   },
@@ -190,10 +292,123 @@
       "parameters": {
         "type": "object",
         "properties": {
-          "url": { "type": "string", "description": "URL to fetch." },
-          "max_chars": { "type": "integer", "description": "Maximum characters to return. Default 8000." }
+          "url": {
+            "type": "string",
+            "description": "URL to fetch."
+          },
+          "max_chars": {
+            "type": "integer",
+            "description": "Maximum characters to return. Default 8000."
+          }
         },
-        "required": ["url"]
+        "required": [
+          "url"
+        ]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tuist_generate",
+      "description": "Run `tuist generate` to create or update the Xcode project from the Tuist manifest (Project.swift / Workspace.swift) in the given directory.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory containing the Tuist manifest. Defaults to invocation directory."
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tuist_install",
+      "description": "Run `tuist install` to fetch and resolve Swift Package dependencies declared in the Tuist manifest.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory containing the Tuist manifest. Defaults to invocation directory."
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tuist_lint",
+      "description": "Run `tuist lint project` to validate the Tuist manifest for errors and warnings without generating the project.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory containing the Tuist manifest. Defaults to invocation directory."
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "tuist_graph",
+      "description": "Run `tuist graph` to emit the project dependency graph as JSON or dot format. Useful for understanding module dependencies before refactoring.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Directory containing the Tuist manifest. Defaults to invocation directory."
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "json",
+              "dot",
+              "png",
+              "svg"
+            ],
+            "description": "Output format. Default: json."
+          }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "api_docs_fetch",
+      "description": "Fetch REST API reference documentation from a URL. Auto-detects OpenAPI/Swagger JSON specs (tries common spec paths if a root URL is given) and returns structured endpoint summaries with methods, parameters, and response codes. Optionally filters to a single endpoint path. Falls back to plain text for non-spec URLs. Prefer JSON spec URLs over YAML \u2014 YAML is not parsed.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "Root URL of the API or a direct link to an OpenAPI JSON spec, e.g. 'https://api.example.com' or 'https://api.example.com/openapi.json'."
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Optional path filter, e.g. '/users/{id}'. Returns only endpoints whose path contains this string."
+          },
+          "max_chars": {
+            "type": "integer",
+            "description": "Maximum characters to return. Default 12000."
+          }
+        },
+        "required": [
+          "url"
+        ]
       }
     }
   }
