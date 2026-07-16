@@ -124,7 +124,11 @@ func ollamaChat(model: String, messages: [[String: Any]], tools: [[String: Any]]
     var response: [String: Any] = [:]
     URLSession.shared.dataTask(with: req) { data, _, error in
         defer { sema.signal() }
-        guard let data, error == nil else { return }
+        if let error {
+            printErr("[fcis-agent] Ollama request failed: \(error.localizedDescription)")
+            return
+        }
+        guard let data else { return }
         response = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
     }.resume()
     sema.wait()
@@ -304,14 +308,18 @@ func runAgent(model: String, prompt: String, system: String, useTools: Bool, thi
 
     while true {
         let response = ollamaChat(model: model, messages: messages, tools: tools, think: think)
+        // Empty dict signals a network/serialization error — ollamaChat already printed why.
+        if response.isEmpty { return "ERROR: no response from Ollama — see stderr for details" }
+
         let msg = response["message"] as? [String: Any] ?? [:]
         let calls = msg["tool_calls"] as? [[String: Any]] ?? []
 
         if calls.isEmpty {
-            if let thinking = msg["thinking"] as? String, !thinking.isEmpty {
-                printErr("\n<think>\n\(thinking)\n</think>\n")
-            }
-            return msg["content"] as? String ?? ""
+            let thinking = msg["thinking"] as? String ?? ""
+            if !thinking.isEmpty { printErr("\n<think>\n\(thinking)\n</think>\n") }
+            let content = msg["content"] as? String ?? ""
+            // qwen3 sometimes puts its full answer in <think> and emits empty content.
+            return content.isEmpty && !thinking.isEmpty ? thinking : content
         }
 
         var assistantMsg: [String: Any] = ["role": "assistant"]
