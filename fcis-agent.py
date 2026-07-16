@@ -119,11 +119,36 @@ def tool_write_file(args: dict) -> str:
         return f"ERROR: {e}"
 
 
+# Patterns that would destroy source files or irreversibly remove data.
+# The model must use explicit file-level write_file / git operations instead.
+_BASH_BLOCKLIST = re.compile(
+    r"rm\s+(-[a-zA-Z]*r[a-zA-Z]*f?|-[a-zA-Z]*f[a-zA-Z]*r?|--recursive)\s"  # rm -rf / rm -fr
+    r"|rm\s+--recursive"
+    r"|rmdir\s"
+    r"|git\s+clean\s"          # git clean -fdx wipes untracked files
+    r"|tuist\s+clean"        # tuist clean removes derived data
+    r"|xcodebuild\s+clean"   # same for xcodebuild
+    r"|mkfs|dd\s+if="      # disk-level operations
+    r"|chmod\s+-R\s+000"       # permission wipe
+    r"|:\s*>\s*/",               # truncate files under root
+    re.IGNORECASE,
+)
+
 def tool_bash_exec(args: dict) -> str:
-    cwd = expand(args["cwd"]) if "cwd" in args else default_cwd()
+    command = args.get("command", "")
+    cwd     = expand(args["cwd"]) if "cwd" in args else default_cwd()
+
+    print(f"  [bash_exec] {command!r}", file=sys.stderr)
+
+    if _BASH_BLOCKLIST.search(command):
+        return (
+            f"ERROR: command blocked — contains a potentially destructive operation: {command!r}. "
+            "Use write_file, git operations, or a more targeted command instead."
+        )
+
     try:
         result = subprocess.run(
-            args["command"], shell=True, cwd=cwd,
+            command, shell=True, cwd=cwd,
             capture_output=True, text=True, timeout=30,
         )
         out = result.stdout + result.stderr

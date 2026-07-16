@@ -50,7 +50,7 @@
     "type": "function",
     "function": {
       "name": "bash_exec",
-      "description": "Run a shell command and return stdout + stderr. Timeout 30s. Use for one-off commands not covered by specialized tools.",
+      "description": "Run a shell command and return stdout + stderr. Timeout 30s. Use for one-off commands not covered by specialized tools. BLOCKED: rm -r/rf, rmdir, git clean, tuist clean, xcodebuild clean, mkfs, dd if=. Use write_file for file writes and git tools for version control instead.",
       "parameters": {
         "type": "object",
         "properties": {

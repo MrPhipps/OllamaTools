@@ -221,9 +221,30 @@ func grepCodebaseTool(_ args: [String: Any]) throws -> String {
     return runShell(cmd)
 }
 
+// Commands the agent must never run — use write_file or targeted tools instead.
+let bashBlocklist: [NSRegularExpression] = [
+    "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f?|-[a-zA-Z]*f[a-zA-Z]*r?|--recursive)\\s",
+    "rm\\s+--recursive",
+    "\\brmdir\\s",
+    "\\bgit\\s+clean\\s",
+    "\\btuist\\s+clean\\b",
+    "\\bxcodebuild\\s+clean\\b",
+    "\\bmkfs\\b",
+    "\\bdd\\s+if=",
+].compactMap { try? NSRegularExpression(pattern: $0, options: .caseInsensitive) }
+
+func isBashBlocked(_ command: String) -> Bool {
+    let range = NSRange(command.startIndex..., in: command)
+    return bashBlocklist.contains { $0.firstMatch(in: command, range: range) != nil }
+}
+
 func bashExecTool(_ args: [String: Any]) throws -> String {
     guard let command = args["command"] as? String else { throw ToolError.missingArg("command") }
     let cwd = (args["cwd"] as? String).map { expandPath($0).path }
+    printErr("  [bash_exec] \(command)")
+    if isBashBlocked(command) {
+        return "ERROR: command blocked — contains a potentially destructive operation: \(command). Use write_file, git operations, or a more targeted command instead."
+    }
     return runShell(command, cwd: cwd, timeout: 30)
 }
 
