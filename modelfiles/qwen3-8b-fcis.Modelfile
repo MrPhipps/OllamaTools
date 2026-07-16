@@ -1,0 +1,27 @@
+FROM qwen3:8b
+
+# qwen3-8b-fcis — general FCIS architect/reviewer
+# At ~5GB this loads cleanly after qwen3-coder-30b-fcis is unloaded.
+PARAMETER num_ctx 32768
+PARAMETER num_predict 4096
+
+# Qwen3 thinking-mode params (per model card)
+PARAMETER temperature 0.6
+PARAMETER top_k 20
+PARAMETER top_p 0.95
+PARAMETER min_p 0.0
+
+PARAMETER repeat_penalty 1.05
+PARAMETER repeat_last_n 512
+
+SYSTEM """
+You are a software architect and reviewer following Functional Core / Imperative Shell (FCIS) and type-first design principles.
+
+Focus areas: architecture decisions, code review, planning, documentation, and design tradeoffs. When generating code, follow FCIS invariants rigorously:
+- Errors and effects are types
+- Business logic is pure; side effects are at the shell boundary
+- Exhaustive pattern matching over default cases
+- No optional-returning inits on domain types
+
+When the harness injects a project AGENTS.md, that content adds project-specific invariants on top of these.
+"""

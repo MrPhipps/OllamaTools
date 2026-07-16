@@ -1,0 +1,200 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "read_file",
+      "description": "Read the contents of a file. Use for reading Swift source, specs, configs, or any project file.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Absolute or ~/ path to the file." },
+          "lines": { "type": "string", "description": "Optional line range, e.g. '10-50'." }
+        },
+        "required": ["path"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "write_file",
+      "description": "Write content to a file, creating or overwriting it.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Absolute or ~/ path to write." },
+          "content": { "type": "string", "description": "Full content to write." }
+        },
+        "required": ["path", "content"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "bash_exec",
+      "description": "Run a shell command and return stdout + stderr. Timeout 30s. Use for one-off commands not covered by specialized tools.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "command": { "type": "string", "description": "Shell command to run." },
+          "cwd": { "type": "string", "description": "Working directory. Defaults to invocation directory." }
+        },
+        "required": ["command"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "list_directory",
+      "description": "List files in a directory, optionally filtered by extension.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Directory to list." },
+          "extension": { "type": "string", "description": "Extension filter without dot, e.g. 'swift'." },
+          "recursive": { "type": "boolean", "description": "Recurse into subdirectories. Default false." }
+        },
+        "required": ["path"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "grep_codebase",
+      "description": "Search for a pattern across files, returning file:line matches.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": { "type": "string", "description": "Regex or literal string to search." },
+          "path": { "type": "string", "description": "Directory or file to search. Defaults to invocation directory." },
+          "extension": { "type": "string", "description": "Restrict to files with this extension, e.g. 'swift'." }
+        },
+        "required": ["pattern"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "swift_diagnostics",
+      "description": "Type-check a Swift source file using the current Xcode toolchain and return compiler errors and warnings. Use after writing or modifying Swift code to verify it compiles. Faster than a full build.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Path to the .swift file to type-check." },
+          "extra_flags": { "type": "string", "description": "Optional extra swiftc flags, e.g. '-strict-concurrency=complete'." }
+        },
+        "required": ["path"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "swift_build",
+      "description": "Run `swift build` (or `xcodebuild`) in a project directory and return compiler output. Use to verify a full package builds after making changes.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cwd": { "type": "string", "description": "Project root containing Package.swift. Defaults to invocation directory." },
+          "configuration": { "type": "string", "enum": ["debug", "release"], "description": "Build configuration. Default: debug." }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "swift_test",
+      "description": "Run Swift package tests, optionally filtered to a specific test name or suite.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "filter": { "type": "string", "description": "Test name filter, e.g. 'MIDIChannelTests' or 'testInvalidChannel'." },
+          "cwd": { "type": "string", "description": "Project root. Defaults to invocation directory." }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "git_diff",
+      "description": "Show the current working tree diff, or a diff for a specific file. Use to review what has changed before committing or reporting.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "path": { "type": "string", "description": "Optional file path to diff. Omit for full working tree diff." },
+          "staged": { "type": "boolean", "description": "Show staged (--cached) diff instead of unstaged. Default false." },
+          "cwd": { "type": "string", "description": "Git repo root. Defaults to invocation directory." }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "git_status",
+      "description": "Show the current git status: modified, staged, and untracked files.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "cwd": { "type": "string", "description": "Git repo root. Defaults to invocation directory." }
+        },
+        "required": []
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "sdk_search",
+      "description": "Search Apple platform SDK .swiftinterface files for a type, protocol, function, or conformance. Returns ground-truth API signatures from the installed Xcode SDK. Use to verify an API exists, find its exact signature, or check conformances before writing code.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "pattern": { "type": "string", "description": "Regex or literal string to search for, e.g. 'MIDIClientCreate' or 'protocol Sendable'." },
+          "framework": { "type": "string", "description": "Optional framework name to narrow the search, e.g. 'CoreMIDI', 'SwiftUI', 'Combine'. Omit to search all frameworks." },
+          "max_results": { "type": "integer", "description": "Maximum matching lines to return. Default 40." }
+        },
+        "required": ["pattern"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "web_search",
+      "description": "Search the web via DuckDuckGo and return titles, URLs, and snippets. Use for looking up Swift documentation, Apple developer docs, swift.org proposals, or Stack Overflow. Prefer sdk_search for API existence checks — use web_search for conceptual questions or official docs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search query, e.g. 'Swift SE-0296 async main' or 'CoreMIDI MIDISendEventList macOS 14'." },
+          "max_results": { "type": "integer", "description": "Number of results to return. Default 8." }
+        },
+        "required": ["query"]
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "web_fetch",
+      "description": "Fetch the text content of a URL. Use for reading a specific Swift Evolution proposal, Apple docs page, or GitHub file. Returns plain text (HTML stripped).",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "url": { "type": "string", "description": "URL to fetch." },
+          "max_chars": { "type": "integer", "description": "Maximum characters to return. Default 8000." }
+        },
+        "required": ["url"]
+      }
+    }
+  }
+]
