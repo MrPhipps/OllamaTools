@@ -139,14 +139,14 @@ def tool_list_directory(args: dict) -> str:
     ext  = args.get("extension", "")
     if not path.exists():
         return f"ERROR: not found: {path}"
-    pattern  = f"**/*.{ext}" if ext and args.get("recursive") else (f"*.{ext}" if ext else "*")
-    glob_fn  = path.glob if not args.get("recursive") else path.rglob
-    pattern  = f"*.{ext}" if ext else "*"
-    if args.get("recursive"):
-        files = sorted(path.rglob(f"*.{ext}" if ext else "*"))
-    else:
-        files = sorted(path.glob(f"*.{ext}" if ext else "*"))
-    return "\n".join(str(f.relative_to(path)) for f in files if f.is_file())
+    try:
+        if args.get("recursive"):
+            files = sorted(path.rglob(f"*.{ext}" if ext else "*"))
+        else:
+            files = sorted(path.glob(f"*.{ext}" if ext else "*"))
+        return "\n".join(str(f.relative_to(path)) for f in files if f.is_file())
+    except Exception as e:
+        return f"ERROR: {e}"
 
 
 def tool_grep_codebase(args: dict) -> str:
@@ -336,7 +336,10 @@ def execute_tool(name: str, args: dict) -> str:
         return f"ERROR: unknown tool '{name}'"
     preview = json.dumps(args, ensure_ascii=False)[:120]
     print(f"  [tool] {name}({preview})", file=sys.stderr)
-    return handler(args)
+    try:
+        return handler(args)
+    except Exception as e:
+        return f"ERROR: tool {name} failed: {e}"
 
 
 # ── Ollama API ────────────────────────────────────────────────────────────────
@@ -378,7 +381,6 @@ def supports_thinking(model: str) -> bool:
             template = info.get("modelfile", "") + info.get("template", "")
             _think_support_cache[model] = (
                 "thinking" in caps or
-                "<think>" in template or
                 "thinking" in template.lower()
             )
         except Exception:
@@ -407,23 +409,31 @@ def run_agent(model: str, prompt: str, system: str, use_tools: bool, think: bool
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
-    for _ in range(10):
+    iteration_count = 0  # Track iterations to prevent infinite loops
+    
+    while iteration_count < 10:
+        iteration_count += 1
         response = ollama_chat(model, messages, tools, think)
         msg      = response.get("message", {})
         calls    = msg.get("tool_calls", [])
 
         if not calls:
             if thinking := msg.get("thinking", ""):
-                print(f"\n<think>\n{thinking}\n</think>\n", file=sys.stderr)
+                print(f"\n<tool_call>\n{thinking}\n<tool_call>\n", file=sys.stderr)
             return msg.get("content", "")
 
         messages.append({"role": "assistant", **{k: v for k, v in msg.items() if k != "role"}})
         for call in calls:
             fn     = call.get("function", {})
             result = execute_tool(fn.get("name", ""), fn.get("arguments", {}))
+            # Add a safety check for tool execution errors
+            if result.startswith("ERROR:"):
+                print(f"[fcis-agent] Tool execution failed: {result}", file=sys.stderr)
+                # Return the error instead of continuing the loop
+                return result
             messages.append({"role": "tool", "content": result})
 
-    return "ERROR: tool loop exceeded 10 iterations."
+    return "ERROR: tool loop exceeded 10 iterations. This may indicate an infinite loop in tool execution or model responses."
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
