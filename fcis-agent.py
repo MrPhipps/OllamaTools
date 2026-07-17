@@ -24,6 +24,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -570,14 +571,20 @@ def ollama_chat(model: str, messages: list, tools: list | None, think: bool) -> 
 
 # ── Tool loop ─────────────────────────────────────────────────────────────────
 
-def run_agent(model: str, prompt: str, system: str, use_tools: bool, think: bool) -> str:
+MAX_ITERATIONS = 10
+
+def run_agent(model: str, prompt: str, system: str, use_tools: bool, think: bool):
+    """Returns (response_text, tool_trace, iterations_used, hit_cap, prompt_tokens, eval_tokens)."""
     tools    = json.loads(TOOLS_FILE.read_text()) if (use_tools and TOOLS_FILE.exists()) else None
     messages = []
     if system:
         messages.append({"role": "system", "content": system})
     messages.append({"role": "user", "content": prompt})
 
-    while True:
+    tool_trace = []
+    iteration  = 0
+
+    while iteration < MAX_ITERATIONS:
         response = ollama_chat(model, messages, tools, think)
         msg      = response.get("message", {})
         calls    = msg.get("tool_calls", [])
@@ -585,25 +592,60 @@ def run_agent(model: str, prompt: str, system: str, use_tools: bool, think: bool
         if not calls:
             if thinking := msg.get("thinking", ""):
                 print(f"\n<think>\n{thinking}\n</think>\n", file=sys.stderr)
-            return msg.get("content", "")
+            return (
+                msg.get("content", ""),
+                tool_trace,
+                iteration,
+                False,
+                response.get("prompt_eval_count", 0),
+                response.get("eval_count", 0),
+            )
 
         messages.append({"role": "assistant", **{k: v for k, v in msg.items() if k != "role"}})
         for call in calls:
-            fn     = call.get("function", {})
-            result = execute_tool(fn.get("name", ""), fn.get("arguments", {}))
+            fn      = call.get("function", {})
+            name    = fn.get("name", "")
+            args    = fn.get("arguments", {})
+            args_summary = ", ".join(f"{k}={str(v)[:60]}" for k, v in args.items())
+            print(f"[fcis-agent] ⟳ {name}({args_summary})", file=sys.stderr, flush=True)
+            t0      = time.monotonic()
+            result  = execute_tool(name, args)
+            ms      = int((time.monotonic() - t0) * 1000)
             if result.startswith("ERROR:"):
-                print(f"[fcis-agent] Tool error (passing to model): {result}", file=sys.stderr)
+                print(f"[fcis-agent] ✗ Tool error (passing to model): {result}", file=sys.stderr)
+            else:
+                print(f"[fcis-agent] ✓ {name} → {len(result)}b in {ms}ms", file=sys.stderr)
+            tool_trace.append({
+                "tool":        name,
+                "args":        args_summary,
+                "result_len":  len(result),
+                "duration_ms": ms,
+                "is_error":    result.startswith("ERROR:"),
+            })
             messages.append({"role": "tool", "content": result})
+        iteration += 1
+
+    return ("ERROR: tool loop exceeded iteration cap", tool_trace, MAX_ITERATIONS, True, 0, 0)
 
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 
-def log_session(model: str, prompt: str, response: str):
+def log_session(model: str, prompt: str, response: str, tool_trace: list,
+                iterations: int, hit_cap: bool, prompt_tokens: int, eval_tokens: int):
     LOG_DIR.mkdir(exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    (LOG_DIR / f"{stamp}_{model.replace(':', '-')}.json").write_text(
-        json.dumps({"timestamp": stamp, "model": model, "prompt": prompt, "response": response}, indent=2)
-    )
+    entry = {
+        "timestamp":         stamp,
+        "model":             model,
+        "prompt":            prompt,
+        "response":          response,
+        "iterations_used":   iterations,
+        "hit_iteration_cap": hit_cap,
+        "prompt_tokens":     prompt_tokens,
+        "eval_tokens":       eval_tokens,
+        "tool_trace":        tool_trace,
+    }
+    (LOG_DIR / f"{stamp}_{model.replace(':', '-')}.json").write_text(json.dumps(entry, indent=2))
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
@@ -642,13 +684,17 @@ def main():
     print(f"[fcis-agent] model={model} tools={'off' if args.no_tools else 'on'} "
           f"think={'off' if args.no_think else 'on'}", file=sys.stderr)
 
-    response = run_agent(
+    response, tool_trace, iterations, hit_cap, prompt_tokens, eval_tokens = run_agent(
         model=model, prompt=prompt, system=system,
         use_tools=not args.no_tools, think=not args.no_think,
     )
     print(response)
+    if hit_cap:
+        print(f"[fcis-agent] WARNING: tool loop hit {MAX_ITERATIONS}-iteration cap — response may be incomplete", file=sys.stderr)
+    if eval_tokens:
+        print(f"[fcis-agent] tokens: prompt={prompt_tokens} eval={eval_tokens} total={prompt_tokens + eval_tokens}", file=sys.stderr)
     if args.log:
-        log_session(model, prompt, response)
+        log_session(model, prompt, response, tool_trace, iterations, hit_cap, prompt_tokens, eval_tokens)
 
 
 if __name__ == "__main__":

@@ -17,10 +17,40 @@ enum Config {
     ]
 }
 
-// MARK: - Stderr
+// MARK: - Stderr / Activity indicator
 
 func printErr(_ s: String) {
     FileHandle.standardError.write(Data((s + "\n").utf8))
+}
+
+// Spinning indicator shown while a tool call executes.
+// Writes to stderr; caller must call stop() to erase it before the next printErr.
+final class Spinner {
+    private let frames = ["⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"]
+    private var idx = 0
+    private var label: String
+    private var timer: DispatchSourceTimer?
+
+    init(label: String) {
+        self.label = label
+        let src = DispatchSource.makeTimerSource(queue: .global())
+        src.schedule(deadline: .now(), repeating: .milliseconds(80))
+        src.setEventHandler { [weak self] in self?.tick() }
+        src.resume()
+        timer = src
+    }
+
+    private func tick() {
+        let frame = frames[idx % frames.count]
+        idx += 1
+        FileHandle.standardError.write(Data("\r\u{1B}[K[fcis-agent] \(frame) \(label)".utf8))
+    }
+
+    func stop() {
+        timer?.cancel()
+        timer = nil
+        FileHandle.standardError.write(Data("\r\u{1B}[K".utf8))  // erase spinner line
+    }
 }
 
 // MARK: - String helpers
@@ -485,26 +515,46 @@ let toolSchema: [[String: Any]] = [
 
 // MARK: - Agent loop
 
-func runAgent(model: String, prompt: String, system: String, useTools: Bool, think: Bool) -> String {
+struct AgentResult {
+    var response: String
+    var toolTrace: [[String: Any]]
+    var iterationsUsed: Int
+    var hitIterationCap: Bool
+    var promptTokens: Int
+    var evalTokens: Int
+}
+
+func runAgent(model: String, prompt: String, system: String, useTools: Bool, think: Bool) -> AgentResult {
+    let maxIterations = 10
     var messages: [[String: Any]] = []
     if !system.isEmpty { messages.append(["role": "system", "content": system]) }
     messages.append(["role": "user", "content": prompt])
     let tools: [[String: Any]]? = useTools ? toolSchema : nil
 
-    while true {
-        let response = ollamaChat(model: model, messages: messages, tools: tools, think: think)
-        // Empty dict signals a network/serialization error — ollamaChat already printed why.
-        if response.isEmpty { return "ERROR: no response from Ollama — see stderr for details" }
+    var toolTrace: [[String: Any]] = []
+    var iteration = 0
 
-        let msg = response["message"] as? [String: Any] ?? [:]
+    while iteration < maxIterations {
+        let ollamaResponse = ollamaChat(model: model, messages: messages, tools: tools, think: think)
+        if ollamaResponse.isEmpty {
+            return AgentResult(response: "ERROR: no response from Ollama — see stderr for details",
+                               toolTrace: toolTrace, iterationsUsed: iteration,
+                               hitIterationCap: false, promptTokens: 0, evalTokens: 0)
+        }
+
+        let msg = ollamaResponse["message"] as? [String: Any] ?? [:]
         let calls = msg["tool_calls"] as? [[String: Any]] ?? []
 
         if calls.isEmpty {
             let thinking = msg["thinking"] as? String ?? ""
             if !thinking.isEmpty { printErr("\n<think>\n\(thinking)\n</think>\n") }
             let content = msg["content"] as? String ?? ""
-            // qwen3 sometimes puts its full answer in <think> and emits empty content.
-            return content.isEmpty && !thinking.isEmpty ? thinking : content
+            let finalText = content.isEmpty && !thinking.isEmpty ? thinking : content
+            let promptTokens = ollamaResponse["prompt_eval_count"] as? Int ?? 0
+            let evalTokens   = ollamaResponse["eval_count"] as? Int ?? 0
+            return AgentResult(response: finalText, toolTrace: toolTrace,
+                               iterationsUsed: iteration, hitIterationCap: false,
+                               promptTokens: promptTokens, evalTokens: evalTokens)
         }
 
         var assistantMsg: [String: Any] = ["role": "assistant"]
@@ -512,27 +562,62 @@ func runAgent(model: String, prompt: String, system: String, useTools: Bool, thi
         messages.append(assistantMsg)
 
         for call in calls {
-            let fn = call["function"] as? [String: Any] ?? [:]
-            let name = fn["name"] as? String ?? ""
-            let args = fn["arguments"] as? [String: Any] ?? [:]
-            let result = executeTool(name: name, args: args)
-            if result.hasPrefix("ERROR:") {
+            let fn     = call["function"] as? [String: Any] ?? [:]
+            let name   = fn["name"] as? String ?? ""
+            let args   = fn["arguments"] as? [String: Any] ?? [:]
+            let argsSummary = args.map { k, v -> String in
+                let preview = String(describing: v).prefix(60)
+                return "\(k)=\(preview)"
+            }.joined(separator: ", ")
+
+            let spinner = Spinner(label: "\(name)(\(argsSummary))")
+            let start   = Date()
+            let result  = executeTool(name: name, args: args)
+            let ms      = Int(Date().timeIntervalSince(start) * 1000)
+            spinner.stop()
+
+            let isError = result.hasPrefix("ERROR:")
+            if isError {
                 printErr("[fcis-agent] Tool error (passing to model): \(result)")
+            } else {
+                printErr("[fcis-agent] ✓ \(name) → \(result.count)b in \(ms)ms")
             }
+            toolTrace.append([
+                "tool":        name,
+                "args":        argsSummary,
+                "result_len":  result.count,
+                "duration_ms": ms,
+                "is_error":    isError,
+            ])
             messages.append(["role": "tool", "content": result])
         }
+        iteration += 1
     }
+
+    return AgentResult(response: "ERROR: tool loop exceeded \(maxIterations) iterations",
+                       toolTrace: toolTrace, iterationsUsed: maxIterations,
+                       hitIterationCap: true, promptTokens: 0, evalTokens: 0)
 }
 
 // MARK: - Logging
 
-func logSession(model: String, prompt: String, response: String) {
+func logSession(model: String, prompt: String, result: AgentResult) {
     let logDir = FileManager.default.currentDirectoryPath + "/logs"
     try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
     let fmt = DateFormatter()
     fmt.dateFormat = "yyyyMMdd_HHmmss"
     let file = "\(logDir)/\(fmt.string(from: Date()))_\(model).json"
-    let entry: [String: Any] = ["model": model, "prompt": prompt, "response": response]
+    let entry: [String: Any] = [
+        "timestamp":          fmt.string(from: Date()),
+        "model":              model,
+        "prompt":             prompt,
+        "response":           result.response,
+        "iterations_used":    result.iterationsUsed,
+        "hit_iteration_cap":  result.hitIterationCap,
+        "prompt_tokens":      result.promptTokens,
+        "eval_tokens":        result.evalTokens,
+        "tool_trace":         result.toolTrace,
+    ]
     if let data = try? JSONSerialization.data(withJSONObject: entry, options: .prettyPrinted) {
         try? data.write(to: URL(fileURLWithPath: file))
         printErr("[fcis-agent] session logged to \(file)")
@@ -601,7 +686,13 @@ if cli.showModel {
 }
 
 let system = loadSystemContext(override: cli.agentsPath)
-let response = runAgent(model: resolvedModel, prompt: cli.prompt, system: system, useTools: !cli.noTools, think: !cli.noThink)
-print(response)
+let result = runAgent(model: resolvedModel, prompt: cli.prompt, system: system, useTools: !cli.noTools, think: !cli.noThink)
+print(result.response)
 
-if cli.doLog { logSession(model: resolvedModel, prompt: cli.prompt, response: response) }
+if result.hitIterationCap {
+    printErr("[fcis-agent] WARNING: tool loop hit \(result.iterationsUsed)-iteration cap — response may be incomplete")
+}
+if result.evalTokens > 0 {
+    printErr("[fcis-agent] tokens: prompt=\(result.promptTokens) eval=\(result.evalTokens) total=\(result.promptTokens + result.evalTokens)")
+}
+if cli.doLog { logSession(model: resolvedModel, prompt: cli.prompt, result: result) }
