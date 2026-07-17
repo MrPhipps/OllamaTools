@@ -17,8 +17,11 @@ ollama list | grep fcis
 
 echo ""
 echo "==> Verify (shows parameters):"
-echo "    curl -s localhost:11434/api/show -d '{\"model\":\"qwen3-coder-30b-fcis\"}' | jq .parameters"
+echo "    curl -s localhost:11434/api/show -d '{\"model\":\"qwen3-coder-30b-fcis\"}' | jq .parameters "
+echo "    curl -s localhost:11434/api/show -d '{\"model\":\"qwen3-coder-30b-fcis\"}' | jq .parameters "
 echo ""
 echo "==> Test routing:"
+echo "    swift $SCRIPT_DIR/fcis-agent.swift --show-model 'write a Swift enum for MIDIMessage'"
+echo "    swift $SCRIPT_DIR/fcis-agent.swift --show-model 'what is the FCIS architecture?'"
 echo "    python $SCRIPT_DIR/fcis-agent.py --show-model 'write a Swift enum for MIDIMessage'"
 echo "    python $SCRIPT_DIR/fcis-agent.py --show-model 'what is the FCIS architecture?'"
