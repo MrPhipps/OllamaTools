@@ -602,7 +602,7 @@ func runAgent(model: String, prompt: String, system: String, useTools: Bool, thi
 // MARK: - Logging
 
 func logSession(model: String, prompt: String, result: AgentResult) {
-    let logDir = FileManager.default.currentDirectoryPath + "/logs"
+    let logDir = FileManager.default.currentDirectoryPath + "/.logs"
     try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
     let fmt = DateFormatter()
     fmt.dateFormat = "yyyyMMdd_HHmmss"

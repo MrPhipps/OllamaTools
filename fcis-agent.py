@@ -34,7 +34,7 @@ from pathlib import Path
 
 OLLAMA_BASE   = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 TOOLS_FILE    = Path(__file__).parent / "tools/fcis_tools.json"
-LOG_DIR       = Path(__file__).parent / "logs"
+LOG_DIR       = Path(__file__).parent / ".logs"
 
 MODEL_CODER   = "qwen3-coder-30b-fcis"
 MODEL_GENERAL = "qwen3-8b-fcis"
