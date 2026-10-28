@@ -1,0 +1,14 @@
+# fcis-coder with a 64K context window, for running Claude Code on a local
+# model (`ollama launch claude --model fcis-coder-64k`). Ollama's Claude Code
+# integration docs recommend 64k+ context; fcis-coder ships with 32768.
+# Everything else (system prompt, sampling) is inherited.
+#
+# RENDERER/PARSER replace the GGUF's embedded Jinja chat template, which raises
+# "System message must be at the beginning" on Claude Code's mid-conversation
+# system messages. Ollama's qwen3.8 renderer merges them into the leading
+# system block instead (ollama model/renderers/qwen38_test.go). There is no
+# qwen3.8 parser; Qwen-family models use qwen3.5.
+FROM fcis-coder
+PARAMETER num_ctx 65536
+RENDERER qwen3.8
+PARSER qwen3.5
