@@ -1,6 +1,6 @@
 ---
 name: ollama-fcis
-description: Dispatches coding tasks to qwen3-coder-30b-fcis and general/architecture queries to qwen3-8b-fcis via the local Ollama harness at ~/Developer/llm/ollama-fcis/fcis-agent.py. Injects the nearest AGENTS.md as system context. Use for offloading low-level Swift code generation, FCIS implementation tasks, architecture questions, or any prompt you want answered by a local FCIS-tuned model.
+description: Dispatches coding tasks to fcis-coder (Qwen 3.8 abliterated) and general/architecture queries to fcis-general (Qwen 3.8 abliterated) via the local Ollama harness at ~/Developer/llm/ollama-fcis/fcis-agent.py. Injects the nearest AGENTS.md as system context. Use for offloading low-level Swift code generation, FCIS implementation tasks, architecture questions, or any prompt you want answered by a local FCIS-tuned model.
 tools: Bash, Read
 ---
 
@@ -61,4 +61,4 @@ Return the model's response verbatim. Then append a **Quality check** section:
 
 - 400 from Ollama → thinking-probe mismatch; the harness handles this automatically since v2
 - Connection refused → `brew services start ollama`
-- Model not found → `bash ~/Developer/llm/ollama-fcis/install.sh`
+- Model not found → check `ollama list` for `fcis-coder` / `fcis-general`. Do NOT run `install.sh`; it builds the retired qwen3-coder-30b/qwen3-8b models

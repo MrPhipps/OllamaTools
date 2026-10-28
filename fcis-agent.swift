@@ -6,8 +6,8 @@ import Darwin
 
 enum Config {
     static let ollamaBase = ProcessInfo.processInfo.environment["OLLAMA_HOST"] ?? "http://localhost:11434"
-    static let coderModel = "qwen3-coder-30b-fcis"
-    static let generalModel = "qwen3-8b-fcis"
+    static let coderModel = "fcis-coder"
+    static let generalModel = "fcis-general"
     static let coderSignals: Set<String> = [
         "implement", "write", "fix", "generate", "refactor", "code", "snippet",
         "func", "struct", "enum", "class", "protocol", "actor", "extension",

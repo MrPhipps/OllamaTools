@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-FCIS Agent — routes coding tasks to qwen3-coder-30b-fcis and general queries
-to qwen3-8b-fcis via the Ollama API. Injects the nearest AGENTS.md as system
+FCIS Agent — routes coding tasks to fcis-coder and general queries
+to fcis-general via the Ollama API. Injects the nearest AGENTS.md as system
 context. Runs the tool loop for tool-calling responses.
 
 Usage:
@@ -36,8 +36,8 @@ OLLAMA_BASE   = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 TOOLS_FILE    = Path(__file__).parent / "tools/fcis_tools.json"
 LOG_DIR       = Path(__file__).parent / ".logs"
 
-MODEL_CODER   = "qwen3-coder-30b-fcis"
-MODEL_GENERAL = "qwen3-8b-fcis"
+MODEL_CODER   = "fcis-coder"
+MODEL_GENERAL = "fcis-general"
 
 # Keywords that signal a coding task → route to coder model
 CODER_SIGNALS = {
